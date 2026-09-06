@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RadiaCare | Servicio de Radioterapia Hospitalario</title>
+  
+  <!-- Fuentes: Plus Jakarta Sans (encabezados con personalidad y calidez) e Inter (cuerpo ultra legible) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0fdf9',
+              100: '#ccfbef',
+              200: '#9af5df',
+              300: '#5ee7cc',
+              400: '#2dd4b6',
+              500: '#14b89d',
+              600: '#0d7c66',
+              700: '#0f6353',
+              800: '#114f44',
+              900: '#132e35',
+              950: '#071b20',
+            },
+            ocean: {
+              50: '#f0f6fa',
+              100: '#dbe8f1',
+              200: '#bbd5e5',
+              300: '#8dbbd4',
+              400: '#599cbf',
+              500: '#3880a6',
+              600: '#2a6789',
+              700: '#23526f',
+              800: '#1e455c',
+              900: '#142938',
+              950: '#0d1a24',
+            },
+            warmalert: {
+              50: '#fff5f2',
+              100: '#ffe8e1',
+              200: '#ffd4c7',
+              300: '#fcae9a',
+              400: '#f67f62',
+              500: '#ea5532',
+              600: '#c2542d',
+              700: '#b1381c',
+              800: '#92301b',
+              900: '#792c1c',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18 & Babel Standalone para componentes JSX reactivos y fluidos -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="h-full text-slate-800 antialiased selection:bg-brand-500 selection:text-white bg-[#F8FAFC]">
+  <div id="root"></div>
+
+  <!-- Aplicación Principal en React -->
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>
