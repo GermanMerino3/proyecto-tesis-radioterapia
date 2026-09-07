@@ -5,8 +5,8 @@ const { useState, useEffect, useMemo, useCallback } = React;
 
 // --- BASE DE DATOS MOCK INICIAL ---
 const INITIAL_MACHINES = [
-  { id: 'AL-1', name: 'Acelerador Lineal 1', room: 'Búnker 1', model: 'Varian Clinac iX', status: 'OPERATIONAL', delayMinutes: 0 },
-  { id: 'AL-2', name: 'Acelerador Lineal 2', room: 'Búnker 2', model: 'Elekta Versa HD', status: 'OPERATIONAL', delayMinutes: 0 },
+  { id: 'AL-1', name: 'Sala de Tratamiento 1', room: 'Búnker 1', model: 'Acelerador Lineal Varian', status: 'OPERATIONAL', delayMinutes: 0 },
+  { id: 'AL-2', name: 'Sala de Tratamiento 2', room: 'Búnker 2', model: 'Acelerador Lineal Elekta', status: 'OPERATIONAL', delayMinutes: 0 },
 ];
 
 const INITIAL_PATIENTS = [
@@ -228,11 +228,394 @@ const EDUCATIONAL_MODULES = [
   },
 ];
 
+// --- PERFILES DEL EQUIPO CLÍNICO ---
+const CLINICAL_STAFF = [
+  { id: 'staff-1', name: 'Dra. Valentina Soto', role: 'Médico Radioncóloga', specialty: 'Jefa de Servicio de Radioterapia' },
+  { id: 'staff-2', name: 'Dr. Fernando Lagos', role: 'Médico Radioncólogo', specialty: 'Especialista en Mama y Tórax' },
+  { id: 'staff-3', name: 'Tec. Med. Roberto Castro', role: 'Tecnólogo Médico', specialty: 'Supervisor de Búnkers y Dosimetría' },
+];
+
+function normalizePhoneDigits(phoneStr) {
+  return (phoneStr || '').replace(/\D/g, '');
+}
+
+// --- PORTAL DE ENTRADA / INICIO DE SESIÓN INSTITUCIONAL ---
+function EntryPortalView({ patients, onLoginPatient, onLoginStaff, onTriggerNotification }) {
+  const [activeTab, setActiveTab] = useState('PATIENT'); // 'PATIENT' | 'STAFF'
+  const [phoneInput, setPhoneInput] = useState('+56 9 8452 1190');
+  const [step, setStep] = useState('PHONE'); // 'PHONE' | 'OTP'
+  const [otpInput, setOtpInput] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [selectedStaffId, setSelectedStaffId] = useState('staff-1');
+
+  // Identificar paciente según el teléfono ingresado
+  const matchedPatient = useMemo(() => {
+    const inputDigits = normalizePhoneDigits(phoneInput);
+    if (!inputDigits || inputDigits.length < 6) return null;
+    return patients.find(p => {
+      const pDigits = normalizePhoneDigits(p.contactPhone);
+      return pDigits.endsWith(inputDigits) || inputDigits.endsWith(pDigits);
+    }) || null;
+  }, [patients, phoneInput]);
+
+  // Handler: Solicitar código SMS/WhatsApp
+  const handleRequestOtp = (e) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+
+    if (!matchedPatient) {
+      setErrorMessage('No encontramos un paciente registrado con este número. Por favor verifica los dígitos o selecciona uno de los accesos de prueba a continuación.');
+      return;
+    }
+
+    onTriggerNotification(
+      matchedPatient.contactPhone,
+      matchedPatient.preferredChannel === 'EMAIL' ? 'SMS' : matchedPatient.preferredChannel,
+      'Código de Acceso RadiaCare',
+      `Hola ${matchedPatient.firstName}, tu código seguro de acceso al portal es 4829. Úsalo para revisar tu calendario de sesiones y recomendaciones.`,
+      'Autenticación Segura'
+    );
+
+    setStep('OTP');
+  };
+
+  // Handler: Validar código
+  const handleVerifyOtp = (e) => {
+    if (e) e.preventDefault();
+    if (!matchedPatient) return;
+    if (otpInput.trim() === '4829' || otpInput.trim().length >= 4) {
+      onLoginPatient(matchedPatient.id);
+    } else {
+      setErrorMessage('Código no válido. Ingresa 4829 o presiona "Usar código de prueba".');
+    }
+  };
+
+  const currentStaff = CLINICAL_STAFF.find(s => s.id === selectedStaffId) || CLINICAL_STAFF[0];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-[#142938] to-[#0d1a24] flex flex-col justify-between p-4 sm:p-6 lg:p-8 relative overflow-hidden">
+      {/* Elementos ambientales de iluminación */}
+      <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      {/* Barra de Encabezado Institucional */}
+      <div className="max-w-4xl w-full mx-auto flex items-center justify-between text-white py-2 z-10">
+        <div className="flex items-center space-x-3">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-brand-600 to-brand-400 flex items-center justify-center shadow-lg shadow-brand-900/50">
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="font-display font-bold text-xl tracking-tight text-white">RadiaCare</span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-brand-900/80 border border-brand-400/40 text-brand-300 font-medium">
+                Hospital Clínico
+              </span>
+            </div>
+            <p className="text-xs text-slate-300">Servicio de Radioterapia Oncológica</p>
+          </div>
+        </div>
+
+        <div className="hidden sm:flex items-center space-x-2 text-[11px] text-slate-300 bg-slate-800/80 px-3.5 py-1.5 rounded-xl border border-slate-700">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Búnkers 1 y 2 en Operación Normal</span>
+        </div>
+      </div>
+
+      {/* Tarjeta Central de Inicio de Sesión */}
+      <div className="max-w-xl w-full mx-auto my-auto py-6 z-10">
+        <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden animate-fade-in">
+          {/* Cabecera de la Tarjeta */}
+          <div className="p-6 sm:p-8 bg-gradient-to-b from-slate-50 to-white border-b border-slate-100 text-center">
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold mb-3">
+              <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <span>Acceso Seguro • Privacidad Estricta (Cero RUT)</span>
+            </div>
+            <h1 className="font-display font-bold text-2xl text-slate-900 tracking-tight">
+              Portal de Entrada al Servicio
+            </h1>
+            <p className="text-xs text-slate-600 mt-1 max-w-md mx-auto">
+              Selecciona tu perfil de ingreso para acceder a tu información personalizada o a la gestión clínica del servicio de radioterapia.
+            </p>
+
+            {/* Pestañas de Acceso */}
+            <div className="mt-6 grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('PATIENT');
+                  setErrorMessage('');
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2 ${
+                  activeTab === 'PATIENT'
+                    ? 'bg-brand-600 text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>Soy Paciente</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('STAFF');
+                  setErrorMessage('');
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2 ${
+                  activeTab === 'STAFF'
+                    ? 'bg-[#142938] text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Equipo Clínico</span>
+              </button>
+            </div>
+          </div>
+
+          {/* VISTA PESTAÑA: PACIENTE */}
+          {activeTab === 'PATIENT' && (
+            <div className="p-6 sm:p-8 space-y-6">
+              {step === 'PHONE' ? (
+                <form onSubmit={handleRequestOtp} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Número Telefónico Registrado:
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={phoneInput}
+                        onChange={(e) => setPhoneInput(e.target.value)}
+                        placeholder="+56 9 8452 1190"
+                        className="w-full px-4 py-3 text-sm font-semibold rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50 focus:bg-white text-slate-900"
+                        required
+                      />
+                      <div className="absolute right-3 top-3 text-slate-400">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-brand-50 border border-brand-100 text-xs text-brand-900 leading-relaxed flex items-start space-x-2.5">
+                    <span className="text-base leading-none">🛡️</span>
+                    <div>
+                      <strong>Garantía de Privacidad y Calidad:</strong> En RadiaCare no te pediremos RUT ni contraseñas bancarias complejas. Tu teléfono móvil registrado es tu documento verificador único para resguardar tu ficha médica.
+                    </div>
+                  </div>
+
+                  {errorMessage && (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+                      ⚠️ {errorMessage}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 transition-all shadow-md shadow-brand-600/30 flex items-center justify-center space-x-2"
+                  >
+                    <span>Verificar y Recibir Código de Acceso</span>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </button>
+                </form>
+              ) : (
+                /* PASO OTP */
+                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                  <div className="text-center">
+                    <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-2">
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    </div>
+                    <h3 className="font-display font-bold text-base text-slate-900">Código de Seguridad Enviado</h3>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Hemos enviado un código SMS/WhatsApp al <strong>{phoneInput}</strong>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 text-center">
+                      Ingresa el código de 4 dígitos:
+                    </label>
+                    <input
+                      type="text"
+                      maxLength="4"
+                      value={otpInput}
+                      onChange={(e) => setOtpInput(e.target.value)}
+                      placeholder="4829"
+                      className="w-40 mx-auto block text-center tracking-widest text-2xl font-mono font-bold py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-slate-900"
+                      autoFocus
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setOtpInput('4829')}
+                    className="block mx-auto text-xs text-brand-700 hover:text-brand-800 font-semibold underline"
+                  >
+                    Usar código recibido: 4829 (Autocompletar)
+                  </button>
+
+                  {errorMessage && (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium text-center">
+                      ⚠️ {errorMessage}
+                    </div>
+                  )}
+
+                  <div className="pt-2 flex items-center space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStep('PHONE');
+                        setErrorMessage('');
+                      }}
+                      className="w-1/3 py-2.5 px-3 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                    >
+                      ← Cambiar
+                    </button>
+                    <button
+                      type="submit"
+                      className="w-2/3 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 transition-colors shadow-md"
+                    >
+                      Ingresar al Portal
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* ACCESOS RÁPIDOS DEMO PARA EVALUACIÓN / PROFESOR */}
+              <div className="pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Accesos Rápidos Demo (1 Clic):
+                  </span>
+                  <span className="text-[10px] text-slate-400">Demostración para docentes</span>
+                </div>
+
+                <div className="space-y-2">
+                  {patients.map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => onLoginPatient(p.id)}
+                      className="w-full p-2.5 rounded-xl border border-slate-200 hover:border-brand-400 bg-slate-50 hover:bg-brand-50/50 text-left transition-all flex items-center justify-between group"
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-brand-100 text-brand-800 font-bold text-xs flex items-center justify-center group-hover:bg-brand-600 group-hover:text-white transition-colors">
+                          {p.firstName[0]}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+                            <span>{p.firstName} {p.lastNameInitial}</span>
+                            <span className="text-[10px] font-normal text-slate-500 font-mono">({p.contactPhone})</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            {p.diagnosisLabel.replace('Cáncer de ', '')} • {p.machineId === 'AL-1' ? 'Sala 1 (Búnker 1)' : 'Sala 2 (Búnker 2)'}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold text-brand-700 group-hover:text-brand-800">
+                        Entrar →
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VISTA PESTAÑA: EQUIPO CLÍNICO */}
+          {activeTab === 'STAFF' && (
+            <div className="p-6 sm:p-8 space-y-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Selecciona tu Perfil Profesional:
+                </label>
+                <div className="space-y-2.5">
+                  {CLINICAL_STAFF.map(staff => {
+                    const isSelected = selectedStaffId === staff.id;
+                    return (
+                      <div
+                        key={staff.id}
+                        onClick={() => setSelectedStaffId(staff.id)}
+                        className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50/70 shadow-sm ring-1 ring-blue-500'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${
+                            isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            👨‍⚕️
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-900">{staff.name}</h4>
+                            <p className="text-[11px] text-slate-600">{staff.role} • {staff.specialty}</p>
+                          </div>
+                        </div>
+                        <input
+                          type="radio"
+                          name="staffProfile"
+                          checked={isSelected}
+                          onChange={() => setSelectedStaffId(staff.id)}
+                          className="text-blue-600 focus:ring-blue-500 h-4 w-4"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 leading-relaxed">
+                <strong>Área Restringida:</strong> Permite gestionar la planilla digital de pacientes, reprogramar citas con avisos empáticos automáticos y activar avisos preventivos por calibración o seguridad de búnkers.
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onLoginStaff(currentStaff)}
+                className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white bg-[#142938] hover:bg-slate-800 transition-all shadow-md flex items-center justify-center space-x-2"
+              >
+                <span>Ingresar a la Planilla de Gestión Clínica</span>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer del Portal de Entrada */}
+      <div className="max-w-4xl w-full mx-auto text-center text-xs text-slate-400 py-3 z-10">
+        Hospital Clínico de Alta Complejidad • Plataforma RadiaCare • Diseñado con empatía clínica y privacidad estricta
+      </div>
+    </div>
+  );
+}
+
 // --- COMPONENTE PRINCIPAL APP ---
 function App() {
-  // Estado general
-  const [activeRole, setActiveRole] = useState('PATIENT'); // 'PATIENT' | 'STAFF'
-  const [selectedPatientId, setSelectedPatientId] = useState('pat-1');
+  // Estado de Sesión Hospitalaria:
+  // null = Portal de Entrada
+  // { role: 'PATIENT', patientId } = Portal del Paciente
+  // { role: 'STAFF', staffName, staffRole } = Planilla del Profesional
+  const [session, setSession] = useState(null);
+  const [previewPatientId, setPreviewPatientId] = useState(null);
+
   const [patients, setPatients] = useState(INITIAL_PATIENTS);
   const [machines, setMachines] = useState(INITIAL_MACHINES);
   const [appointments, setAppointments] = useState(generateInitialAppointments);
@@ -244,14 +627,20 @@ function App() {
   const [calendarMonthOffset, setCalendarMonthOffset] = useState(0); // 0 = Septiembre 2026
   const [selectedAppointmentDetail, setSelectedAppointmentDetail] = useState(null);
   const [showAbsenceModal, setShowAbsenceModal] = useState(false);
-  const [showRescheduleModal, setShowRescheduleModal] = useState(null); // appointment to reschedule
+  const [showRescheduleModal, setShowRescheduleModal] = useState(null);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [selectedEducationalArticle, setSelectedEducationalArticle] = useState(null);
 
-  // Paciente activo actual
+  // Paciente activo según sesión o preview
   const currentPatient = useMemo(() => {
-    return patients.find(p => p.id === selectedPatientId) || patients[0];
-  }, [patients, selectedPatientId]);
+    if (session?.role === 'PATIENT') {
+      return patients.find(p => p.id === session.patientId) || patients[0];
+    }
+    if (session?.role === 'STAFF' && previewPatientId) {
+      return patients.find(p => p.id === previewPatientId) || patients[0];
+    }
+    return patients[0];
+  }, [patients, session, previewPatientId]);
 
   // Máquina asignada al paciente actual
   const currentPatientMachine = useMemo(() => {
@@ -291,7 +680,7 @@ function App() {
     setNotifications(prev => [newNotif, ...prev]);
     setActiveToast(newNotif);
 
-    // Auto ocultar toast tras 6 segundos
+    // Auto ocultar toast tras 7 segundos
     setTimeout(() => {
       setActiveToast(current => (current && current.id === newNotif.id ? null : current));
     }, 7000);
@@ -301,7 +690,6 @@ function App() {
   const handleReportAbsence = useCallback((reason) => {
     if (!nextAppointment) return;
 
-    // Actualizar estado de la cita
     setAppointments(prev => prev.map(apt => {
       if (apt.id === nextAppointment.id) {
         return {
@@ -315,7 +703,6 @@ function App() {
 
     setShowAbsenceModal(false);
 
-    // Disparar confirmación al paciente y al panel
     triggerNotification(
       currentPatient.preferredChannel === 'EMAIL' ? currentPatient.contactEmail : currentPatient.contactPhone,
       currentPatient.preferredChannel,
@@ -345,19 +732,20 @@ function App() {
     setShowRescheduleModal(null);
 
     if (affectedPatient) {
+      const machineObj = machines.find(m => m.id === affectedPatient.machineId);
+      const roomLabel = machineObj ? `${machineObj.name} (${machineObj.room})` : 'tu sala de atención habitual';
       triggerNotification(
         affectedPatient.preferredChannel === 'EMAIL' ? affectedPatient.contactEmail : affectedPatient.contactPhone,
         affectedPatient.preferredChannel,
-        'Actualización de Cita de Radioterapia',
-        `Hola ${affectedPatient.firstName}, tu cita ha sido reprogramada para el día ${newDate} a las ${newTime} hrs en el ${affectedPatient.machineId}. Tu calendario en línea ya se encuentra actualizado.`,
+        'Actualización de horario de tu sesión',
+        `Hola ${affectedPatient.firstName}, te informamos con cariño que hemos actualizado el horario de tu sesión de radioterapia: te esperamos el día ${formatFriendlyDate(newDate)} a las ${newTime} hrs en ${roomLabel}. Tu calendario en la web ya se encuentra actualizado. ¡Que tengas un excelente día!`,
         'Reprogramación de Cita'
       );
     }
-  }, [patients, triggerNotification]);
+  }, [patients, machines, triggerNotification]);
 
-  // Handler: Alerta masiva por falla o retraso de acelerador
+  // Handler: Alerta masiva por contingencia o revisión de sala
   const handleSendMassAlert = useCallback((machineId, alertType, delayMinutes, customNotes) => {
-    // 1. Actualizar estado de la máquina
     setMachines(prev => prev.map(m => {
       if (m.id === machineId) {
         return {
@@ -369,32 +757,33 @@ function App() {
       return m;
     }));
 
-    // 2. Identificar pacientes asignados a esta máquina con citas hoy
     const todayStr = '2026-09-05';
     const affectedAppointments = appointments.filter(a => a.machineId === machineId && a.date === todayStr && a.status === 'SCHEDULED');
-    
-    // 3. Disparar notificaciones masivas
+    const machineObj = machines.find(m => m.id === machineId);
+    const roomTitle = machineObj ? `${machineObj.name} (${machineObj.room})` : 'tu sala de tratamiento';
+
     affectedAppointments.forEach(apt => {
       const patient = patients.find(p => p.id === apt.patientId);
       if (patient) {
+        const newEstimatedTime = calculateDelayedTime(apt.time, delayMinutes);
         const bodyText = alertType === 'MAINTENANCE'
-          ? `AVISO URGENTE: El ${machineId} se encuentra temporalmente en mantención técnica no programada. Nuestro equipo de física médica está trabajando para reanudar a la brevedad. Te contactaremos con tu nueva hora.`
-          : `AVISO DE SERVICIO: El ${machineId} presenta un retraso operacional estimado de ${delayMinutes} minutos debido a calibración. Tu hora de atención de hoy (${apt.time} hrs) se estima ahora para las ${calculateDelayedTime(apt.time, delayMinutes)} hrs. Si deseas, puedes retrasar tu llegada al hospital.`;
+          ? `Hola ${patient.firstName}, te saludamos con mucho cariño desde el Servicio de Radioterapia. El equipo de ${roomTitle} se encuentra en una pausa técnica de seguridad para una revisión preventiva. Queremos darte total tranquilidad: tu sesión y tu dosis de tratamiento están completamente aseguradas. Nuestro equipo de enfermería y recepción se comunicará contigo durante el día para coordinar tu atención sin que tengas que esperar de más. Si tienes alguna duda, puedes contactarnos directamente al mesón de atención.`
+          : `Hola ${patient.firstName}, te escribimos desde el Servicio de Radioterapia. El equipo de ${roomTitle} está realizando un ajuste de rutina y calibración para asegurar que todo esté en óptimas condiciones para tu atención. Por este motivo, las sesiones de hoy tienen un desfase estimado de ${delayMinutes} minutos. Tu sesión de hoy (${apt.time} hrs) se estima ahora para las ${newEstimatedTime} hrs. Si aún estás en casa o en camino, puedes venir con más calma. ¡Te esperamos para atenderte con el mayor cuidado!`;
 
         triggerNotification(
           patient.preferredChannel === 'EMAIL' ? patient.contactEmail : patient.contactPhone,
           patient.preferredChannel,
-          `Alerta Servicio: ${machineId}`,
+          alertType === 'MAINTENANCE' ? 'Información importante sobre tu sesión de hoy' : 'Aviso sobre tu hora de atención hoy',
           bodyText,
-          'Alerta Masiva de Máquina'
+          alertType === 'MAINTENANCE' ? 'Aviso Preventivo de Seguridad' : 'Aviso de Desfase de Horario'
         );
       }
     });
 
     setShowBroadcastModal(false);
-  }, [appointments, patients, triggerNotification]);
+  }, [appointments, patients, machines, triggerNotification]);
 
-  // Handler: Restablecer estado de acelerador a operacional
+  // Handler: Restablecer estado de sala a operacional
   const handleResetMachineStatus = useCallback((machineId) => {
     setMachines(prev => prev.map(m => {
       if (m.id === machineId) {
@@ -403,90 +792,250 @@ function App() {
       return m;
     }));
 
-    triggerNotification(
-      'Todos los pacientes de ' + machineId,
-      'WHATSAPP',
-      'Servicio Normalizado',
-      `El ${machineId} ha completado sus revisiones técnicas y ya opera con total normalidad en horario regular.`,
-      'Restablecimiento Operacional'
-    );
-  }, [triggerNotification]);
+    const machineObj = machines.find(m => m.id === machineId);
+    const roomTitle = machineObj ? `${machineObj.name} (${machineObj.room})` : 'La sala de atención';
 
+    triggerNotification(
+      'Pacientes citados en ' + (machineObj?.room || machineId),
+      'WHATSAPP',
+      'Atención Normalizada',
+      `Buenas noticias: ${roomTitle} ha finalizado sus revisiones de seguridad y precisión. Todo el equipo médico y técnico ya está atendiendo en su horario habitual con total normalidad. ¡Te esperamos!`,
+      'Atención Normalizada'
+    );
+  }, [machines, triggerNotification]);
+
+  // --- SI NO HAY SESIÓN INICIADA: RENDERIZAR PORTAL DE ENTRADA ---
+  if (!session) {
+    return (
+      <div className="min-h-screen">
+        <EntryPortalView
+          patients={patients}
+          onLoginPatient={(patientId) => setSession({ role: 'PATIENT', patientId })}
+          onLoginStaff={(staff) => setSession({ role: 'STAFF', staffName: staff.name, staffRole: staff.role })}
+          onTriggerNotification={triggerNotification}
+        />
+        {activeToast && (
+          <SimulatedPhoneToast
+            notification={activeToast}
+            onClose={() => setActiveToast(null)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // --- SI LA SESIÓN ES DE PACIENTE ---
+  if (session.role === 'PATIENT') {
+    return (
+      <div className="min-h-screen flex flex-col font-sans text-slate-800 bg-[#F8FAFC]">
+        {/* BARRA SUPERIOR EXCLUSIVA DEL PACIENTE */}
+        <header className="bg-[#142938] text-white border-b border-slate-700/60 sticky top-0 z-40 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-400 flex items-center justify-center shadow-inner">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="font-display font-bold text-lg tracking-tight text-white">RadiaCare</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-brand-900/80 border border-brand-400/30 text-brand-300 font-medium">
+                    Portal del Paciente
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 flex items-center space-x-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Acompañamiento en Tiempo Real</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <div className="hidden sm:flex flex-col items-end">
+                <span className="text-xs font-bold text-white">
+                  {currentPatient.firstName} {currentPatient.lastNameInitial}
+                </span>
+                <span className="text-[11px] text-emerald-400 font-mono flex items-center space-x-1">
+                  <span>✓ Teléfono verificado:</span>
+                  <span>{currentPatient.contactPhone}</span>
+                </span>
+              </div>
+
+              <button
+                onClick={() => {
+                  setSession(null);
+                  setPreviewPatientId(null);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-rose-900/80 text-rose-300 hover:text-white text-xs font-bold border border-slate-700 transition-colors flex items-center space-x-1.5 shadow-sm"
+                title="Cerrar sesión de forma segura"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Cerrar Sesión</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* ESTADO GLOBAL DE ACELERADORES (TICKER INFORMATIVO) */}
+        <div className="bg-white border-b border-slate-200 py-1.5 px-4 sm:px-6 lg:px-8 text-xs flex flex-wrap items-center justify-between gap-2 shadow-xs">
+          <div className="flex items-center space-x-4">
+            <span className="font-semibold text-slate-500 uppercase tracking-wider text-[10px]">
+              Estado de Salas de Tratamiento:
+            </span>
+            {machines.map(m => (
+              <div key={m.id} className="flex items-center space-x-1.5">
+                <span className={`w-2.5 h-2.5 rounded-full ${
+                  m.status === 'OPERATIONAL' ? 'bg-emerald-500' :
+                  m.status === 'DELAYED' ? 'bg-amber-500 animate-ping' : 'bg-red-500'
+                }`}></span>
+                <span className="font-medium text-slate-700">{m.name}:</span>
+                <span className={`font-semibold ${
+                  m.status === 'OPERATIONAL' ? 'text-emerald-700' :
+                  m.status === 'DELAYED' ? 'text-amber-700' : 'text-red-700'
+                }`}>
+                  {m.status === 'OPERATIONAL' && 'En horario regular'}
+                  {m.status === 'DELAYED' && `Desfase de +${m.delayMinutes} min (calibración)`}
+                  {m.status === 'MAINTENANCE' && 'Pausa preventiva de seguridad'}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-slate-500 text-[11px] flex items-center space-x-2">
+            <span>Tu sala asignada:</span>
+            <span className="font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
+              {currentPatientMachine?.name || 'Sala 1'} ({currentPatientMachine?.room || 'Búnker 1'})
+            </span>
+          </div>
+        </div>
+
+        {/* CUERPO PRINCIPAL DEL PACIENTE */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <PatientPortalView
+            patient={currentPatient}
+            machine={currentPatientMachine}
+            appointments={currentPatientAppointments}
+            nextAppointment={nextAppointment}
+            educationalModules={currentEducationalModules}
+            calendarViewMode={calendarViewMode}
+            setCalendarViewMode={setCalendarViewMode}
+            calendarMonthOffset={calendarMonthOffset}
+            setCalendarMonthOffset={setCalendarMonthOffset}
+            onSelectAppointment={setSelectedAppointmentDetail}
+            onOpenAbsenceModal={() => setShowAbsenceModal(true)}
+            onSelectArticle={setSelectedEducationalArticle}
+          />
+        </main>
+
+        {/* FOOTER */}
+        <footer className="bg-white border-t border-slate-200 py-4 mt-12 text-center text-xs text-slate-500">
+          <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>Plataforma RadiaCare • Hospital Clínico de Alta Complejidad</span>
+            <span className="text-[11px] text-slate-500">Diseñado con enfoque de empatía clínica, privacidad estricta y reducción activa de ansiedad</span>
+          </div>
+        </footer>
+
+        {/* MODALES DEL PACIENTE */}
+        {showAbsenceModal && (
+          <AbsenceModal
+            patient={currentPatient}
+            appointment={nextAppointment}
+            onClose={() => setShowAbsenceModal(false)}
+            onConfirm={handleReportAbsence}
+          />
+        )}
+
+        {selectedAppointmentDetail && (
+          <AppointmentDetailModal
+            appointment={selectedAppointmentDetail}
+            patient={currentPatient}
+            machine={machines.find(m => m.id === selectedAppointmentDetail.machineId)}
+            onClose={() => setSelectedAppointmentDetail(null)}
+            onCancelFromDetail={() => {
+              setSelectedAppointmentDetail(null);
+              setShowAbsenceModal(true);
+            }}
+          />
+        )}
+
+        {selectedEducationalArticle && (
+          <EducationalArticleModal
+            article={selectedEducationalArticle}
+            patient={currentPatient}
+            onClose={() => setSelectedEducationalArticle(null)}
+          />
+        )}
+
+        {activeToast && (
+          <SimulatedPhoneToast
+            notification={activeToast}
+            onClose={() => setActiveToast(null)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // --- SI LA SESIÓN ES DEL EQUIPO CLÍNICO ---
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-800 bg-[#F8FAFC]">
-      {/* BARRA SUPERIOR DE NAVEGACIÓN Y CONTROL DE PRIVACIDAD */}
+      {/* BANNER SUPERIOR CUANDO SE ENCUENTRA EN MODO VISTA PREVIA DE UN PACIENTE */}
+      {previewPatientId && (
+        <div className="bg-amber-500 text-amber-950 px-4 py-2 text-xs font-semibold flex items-center justify-between shadow-md sticky top-0 z-50">
+          <div className="flex items-center space-x-2">
+            <span className="text-base">👁️</span>
+            <span>
+              <strong>MODO VISTA PREVIA CLÍNICA (AUDITORÍA):</strong> Estás viendo el portal del paciente <strong>{currentPatient.firstName} {currentPatient.lastNameInitial}</strong> ({currentPatient.contactPhone}). El paciente no tiene acceso a la planilla clínica.
+            </span>
+          </div>
+          <button
+            onClick={() => setPreviewPatientId(null)}
+            className="px-3 py-1 rounded-lg bg-amber-950 hover:bg-black text-amber-100 font-bold transition-colors text-xs flex items-center space-x-1 shadow-sm"
+          >
+            <span>← Volver a Planilla Clínica</span>
+          </button>
+        </div>
+      )}
+
+      {/* BARRA SUPERIOR EXCLUSIVA DEL EQUIPO CLÍNICO */}
       <header className="bg-[#142938] text-white border-b border-slate-700/60 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-400 flex items-center justify-center shadow-inner">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center shadow-inner">
               <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-display font-bold text-lg tracking-tight text-white">RadiaCare</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-brand-900/80 border border-brand-400/30 text-brand-300 font-medium">
-                  Radioterapia Hospitalaria
+                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/80 border border-blue-400/30 text-blue-300 font-medium">
+                  Planilla Clínica Digital
                 </span>
               </div>
-              <p className="text-[11px] text-slate-300 flex items-center space-x-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>Cumplimiento Calidad: Privacidad Estricta (Cero RUT)</span>
+              <p className="text-[11px] text-slate-300">
+                Sesión Activa: <strong className="text-white">{session.staffName}</strong> ({session.staffRole})
               </p>
             </div>
           </div>
 
-          {/* SELECTOR DE ROL Y SIMULADOR DE PACIENTE */}
           <div className="flex items-center space-x-3">
-            {/* Si está en modo paciente, permite elegir qué paciente de prueba ver */}
-            {activeRole === 'PATIENT' && (
-              <div className="hidden md:flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700">
-                <span className="text-xs text-slate-300">Paciente Demo:</span>
-                <select
-                  value={selectedPatientId}
-                  onChange={(e) => setSelectedPatientId(e.target.value)}
-                  className="bg-slate-900 text-xs text-white rounded border border-slate-600 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400"
-                >
-                  {patients.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.firstName} ({p.diagnosisLabel.replace('Cáncer de ', '')}) - {p.machineId}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* SWITCH DE MODO: PACIENTE VS PROFESIONAL */}
-            <div className="bg-slate-900/90 p-1 rounded-xl flex items-center border border-slate-700/80">
-              <button
-                onClick={() => setActiveRole('PATIENT')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1.5 ${
-                  activeRole === 'PATIENT'
-                    ? 'bg-brand-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span>Portal Paciente</span>
-              </button>
-
-              <button
-                onClick={() => setActiveRole('STAFF')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1.5 ${
-                  activeRole === 'STAFF'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span>Planilla Digital (Equipo Clínico)</span>
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                setSession(null);
+                setPreviewPatientId(null);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-rose-900/80 text-rose-300 hover:text-white text-xs font-bold border border-slate-700 transition-colors flex items-center space-x-1.5 shadow-sm"
+              title="Cerrar sesión clínica de forma segura"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span>Cerrar Sesión Clínica</span>
+            </button>
           </div>
         </div>
       </header>
@@ -508,25 +1057,25 @@ function App() {
                 m.status === 'OPERATIONAL' ? 'text-emerald-700' :
                 m.status === 'DELAYED' ? 'text-amber-700' : 'text-red-700'
               }`}>
-                {m.status === 'OPERATIONAL' && 'En horario normal'}
-                {m.status === 'DELAYED' && `Retraso de +${m.delayMinutes} min`}
-                {m.status === 'MAINTENANCE' && 'En mantención técnica'}
+                {m.status === 'OPERATIONAL' && 'En horario regular'}
+                {m.status === 'DELAYED' && `Desfase de +${m.delayMinutes} min (calibración)`}
+                {m.status === 'MAINTENANCE' && 'Pausa preventiva de seguridad'}
               </span>
             </div>
           ))}
         </div>
 
         <div className="text-slate-500 text-[11px] flex items-center space-x-2">
-          <span>Identificador de Paciente Activo:</span>
-          <span className="font-mono bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-300">
-            {currentPatient.contactPhone}
+          <span>Control de Calidad:</span>
+          <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+            Auditoría Cero RUT Activa
           </span>
         </div>
       </div>
 
-      {/* CUERPO PRINCIPAL CONDICIONADO AL ROL */}
+      {/* CUERPO PRINCIPAL DEL EQUIPO CLÍNICO */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {activeRole === 'PATIENT' ? (
+        {previewPatientId ? (
           <PatientPortalView
             patient={currentPatient}
             machine={currentPatientMachine}
@@ -550,10 +1099,7 @@ function App() {
             onReschedule={(apt) => setShowRescheduleModal(apt)}
             onOpenBroadcastModal={() => setShowBroadcastModal(true)}
             onResetMachine={handleResetMachineStatus}
-            onSelectPatientForPreview={(pId) => {
-              setSelectedPatientId(pId);
-              setActiveRole('PATIENT');
-            }}
+            onSelectPatientForPreview={(pId) => setPreviewPatientId(pId)}
           />
         )}
       </main>
@@ -562,23 +1108,28 @@ function App() {
       <footer className="bg-white border-t border-slate-200 py-4 mt-12 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>Plataforma RadiaCare • Hospital Clínico de Alta Complejidad</span>
-          <span className="text-[11px] text-slate-500">Diseñado con enfoque de empatía clínica, privacidad estricta y reducción activa de ansiedad</span>
+          <span className="text-[11px] text-slate-500">Gestión Clínica y Dosimetría de Radioterapia Oncológica</span>
         </div>
       </footer>
 
-      {/* --- MODALES Y DRAWERS --- */}
-
-      {/* 1. Modal: Notificar Inasistencia */}
-      {showAbsenceModal && (
-        <AbsenceModal
-          patient={currentPatient}
-          appointment={nextAppointment}
-          onClose={() => setShowAbsenceModal(false)}
-          onConfirm={handleReportAbsence}
+      {/* MODALES DEL EQUIPO CLÍNICO */}
+      {showRescheduleModal && (
+        <RescheduleModal
+          appointment={showRescheduleModal}
+          patient={patients.find(p => p.id === showRescheduleModal.patientId)}
+          onClose={() => setShowRescheduleModal(null)}
+          onSave={handleRescheduleAppointment}
         />
       )}
 
-      {/* 2. Modal: Detalle de Sesión / Cita del Calendario */}
+      {showBroadcastModal && (
+        <BroadcastModal
+          machines={machines}
+          onClose={() => setShowBroadcastModal(false)}
+          onSend={handleSendMassAlert}
+        />
+      )}
+
       {selectedAppointmentDetail && (
         <AppointmentDetailModal
           appointment={selectedAppointmentDetail}
@@ -592,26 +1143,6 @@ function App() {
         />
       )}
 
-      {/* 3. Modal: Reprogramar Cita (Profesional) */}
-      {showRescheduleModal && (
-        <RescheduleModal
-          appointment={showRescheduleModal}
-          patient={patients.find(p => p.id === showRescheduleModal.patientId)}
-          onClose={() => setShowRescheduleModal(null)}
-          onSave={handleRescheduleAppointment}
-        />
-      )}
-
-      {/* 4. Modal: Alerta Masiva de Máquina (Profesional) */}
-      {showBroadcastModal && (
-        <BroadcastModal
-          machines={machines}
-          onClose={() => setShowBroadcastModal(false)}
-          onSend={handleSendMassAlert}
-        />
-      )}
-
-      {/* 5. Drawer / Modal: Cápsula Educativa Detallada */}
       {selectedEducationalArticle && (
         <EducationalArticleModal
           article={selectedEducationalArticle}
@@ -620,7 +1151,6 @@ function App() {
         />
       )}
 
-      {/* 6. TOAST SIMULADOR DE NOTIFICACIÓN AUTOMÁTICA EN TIEMPO REAL */}
       {activeToast && (
         <SimulatedPhoneToast
           notification={activeToast}
@@ -630,6 +1160,7 @@ function App() {
     </div>
   );
 }
+
 
 // ==========================================
 // PORTAL DEL PACIENTE (VISTA PRINCIPAL)
@@ -652,15 +1183,15 @@ function PatientPortalView({
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* AVISO URGENTE DE MÁQUINA SI ESTÁ CON RETRASO O MANTENCIÓN */}
+      {/* AVISO DE ATENCIÓN SI HAY DESFASE O REVISIÓN PREVENTIVA */}
       {machine && machine.status !== 'OPERATIONAL' && (
         <div className={`p-4 rounded-2xl border flex items-start space-x-4 shadow-sm ${
           machine.status === 'DELAYED'
             ? 'bg-amber-50 border-amber-300 text-amber-900'
-            : 'bg-red-50 border-red-300 text-red-900'
+            : 'bg-rose-50 border-rose-300 text-rose-900'
         }`}>
           <div className={`p-2 rounded-xl mt-0.5 ${
-            machine.status === 'DELAYED' ? 'bg-amber-200 text-amber-800' : 'bg-red-200 text-red-800'
+            machine.status === 'DELAYED' ? 'bg-amber-200 text-amber-800' : 'bg-rose-200 text-rose-800'
           }`}>
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -669,13 +1200,13 @@ function PatientPortalView({
           <div className="flex-1">
             <h4 className="font-display font-bold text-base">
               {machine.status === 'DELAYED'
-                ? `Aviso del Servicio: Retraso operacional de +${machine.delayMinutes} minutos en tu acelerador`
-                : 'Aviso Importante: Acelerador en mantención técnica no programada'}
+                ? `Aviso para tu atención de hoy: Pequeño desfase de +${machine.delayMinutes} min en tu sala de tratamiento`
+                : 'Información sobre tu atención: Tu sala se encuentra en revisión preventiva'}
             </h4>
-            <p className="text-sm mt-1">
+            <p className="text-sm mt-1 leading-relaxed">
               {machine.status === 'DELAYED'
-                ? `Tu unidad (${machine.name}) está calibrando parámetros para mayor precisión. Si tu cita es hoy, puedes demorar tu llegada ${machine.delayMinutes} minutos o consultar con la recepción al llegar.`
-                : `Tu unidad (${machine.name}) está siendo ajustada por el equipo de física médica. Nos comunicaremos contigo vía WhatsApp/SMS con tu horario de atención.`}
+                ? `El equipo de tu sala (${machine.room}) está realizando una calibración de rutina para garantizar la máxima precisión y seguridad de tu sesión. Si tu cita es hoy y aún estás en casa, puedes salir con unos ${machine.delayMinutes} minutos más de calma, o bien descansar cómodamente en la sala de estar al llegar.`
+                : `El equipo de tu sala (${machine.room}) se encuentra en una pausa técnica de seguridad. Quédate completamente tranquilo/a: tu tratamiento y tu dosis están garantizados. Nuestro equipo de recepción te contactará directamente para coordinar tu horario.`}
             </p>
           </div>
         </div>
@@ -1682,17 +2213,17 @@ function BroadcastModal({ machines, onClose, onSend }) {
           </div>
           <div>
             <h3 className="font-display font-bold text-xl text-slate-900">
-              Emitir Alerta Masiva a Pacientes
+              Avisar Desfase o Revisión de Sala a Pacientes
             </h3>
             <p className="text-xs text-slate-500">
-              Notifica simultáneamente a todos los pacientes citados hoy en la máquina afectada.
+              Notifica simultáneamente con lenguaje cálido y tranquilizador a los pacientes citados hoy en la sala afectada.
             </p>
           </div>
         </div>
 
         <div className="space-y-4 text-xs">
           <div>
-            <label className="font-semibold text-slate-700 block mb-1">Acelerador Afectado:</label>
+            <label className="font-semibold text-slate-700 block mb-1">Sala de Atención Afectada:</label>
             <select
               value={machineId}
               onChange={(e) => setMachineId(e.target.value)}
@@ -1705,7 +2236,7 @@ function BroadcastModal({ machines, onClose, onSend }) {
           </div>
 
           <div>
-            <label className="font-semibold text-slate-700 block mb-1">Tipo de Evento Técnico:</label>
+            <label className="font-semibold text-slate-700 block mb-1">Motivo del Aviso al Paciente:</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -1716,8 +2247,8 @@ function BroadcastModal({ machines, onClose, onSend }) {
                     : 'bg-slate-50 border-slate-200 text-slate-700'
                 }`}
               >
-                <strong>Retraso Operacional</strong>
-                <span className="block text-[11px] text-slate-500 mt-0.5">Retrasa las horas de hoy</span>
+                <strong>Desfase de Horario</strong>
+                <span className="block text-[11px] text-slate-500 mt-0.5">Calibración de rutina y ajuste de precisión</span>
               </button>
 
               <button
@@ -1725,19 +2256,19 @@ function BroadcastModal({ machines, onClose, onSend }) {
                 onClick={() => setAlertType('MAINTENANCE')}
                 className={`p-3 rounded-xl border text-left font-medium transition-all ${
                   alertType === 'MAINTENANCE'
-                    ? 'bg-red-50 border-red-400 text-red-900 ring-1 ring-red-400'
+                    ? 'bg-rose-50 border-rose-400 text-rose-900 ring-1 ring-rose-400'
                     : 'bg-slate-50 border-slate-200 text-slate-700'
                 }`}
               >
-                <strong>Falla / Mantención</strong>
-                <span className="block text-[11px] text-slate-500 mt-0.5">Detención técnica imprevista</span>
+                <strong>Pausa Preventiva</strong>
+                <span className="block text-[11px] text-slate-500 mt-0.5">Revisión de seguridad sin afectar el tratamiento</span>
               </button>
             </div>
           </div>
 
           {alertType === 'DELAY' && (
             <div>
-              <label className="font-semibold text-slate-700 block mb-1">Retraso Estimado (minutos):</label>
+              <label className="font-semibold text-slate-700 block mb-1">Desfase Estimado (minutos):</label>
               <select
                 value={delayMinutes}
                 onChange={(e) => setDelayMinutes(e.target.value)}
@@ -1753,7 +2284,7 @@ function BroadcastModal({ machines, onClose, onSend }) {
           )}
 
           <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600">
-            📢 <strong>Alcance de la alerta:</strong> Se enviará un mensaje instantáneo personalizado (WhatsApp / SMS / Email) a cada paciente que tenga cita para hoy a partir de la hora actual.
+            📢 <strong>Comunicación Empática:</strong> El sistema enviará automáticamente un mensaje cálido por WhatsApp/SMS a cada paciente de hoy, dándoles tranquilidad sobre su tratamiento y sugiriéndoles salir con calma para evitar esperas innecesarias.
           </div>
         </div>
 
