@@ -235,6 +235,18 @@ const CLINICAL_STAFF = [
   { id: 'staff-3', name: 'Tec. Med. Roberto Castro', role: 'Tecnólogo Médico', specialty: 'Supervisor de Búnkers y Dosimetría' },
 ];
 
+// Fecha simulada de la demo
+const DEMO_TODAY = '2026-09-05';
+
+// Etiquetas visibles para cada tipo de cita
+const APPOINTMENT_TYPE_LABELS = {
+  SESION_RADIOTERAPIA: { badge: (apt) => `Sesión #${apt.sessionNumber}`, title: 'Sesión diaria de radioterapia' },
+  CONTROL_MEDICO: { badge: () => 'Control Médico', title: 'Control semanal con radioncólogo' },
+  TAC_SIMULACION: { badge: () => 'TAC de Simulación', title: 'TAC para planificar tu tratamiento' },
+};
+
+const WEEKDAY_SHORT = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+
 function normalizePhoneDigits(phoneStr) {
   return (phoneStr || '').replace(/\D/g, '');
 }
@@ -626,7 +638,7 @@ function App() {
   const [calendarViewMode, setCalendarViewMode] = useState('MONTH'); // 'MONTH' | 'WEEK'
   const [calendarMonthOffset, setCalendarMonthOffset] = useState(0); // 0 = Septiembre 2026
   const [selectedAppointmentDetail, setSelectedAppointmentDetail] = useState(null);
-  const [showAbsenceModal, setShowAbsenceModal] = useState(false);
+  const [absenceTarget, setAbsenceTarget] = useState(null); // Cita que el paciente quiere cancelar
   const [showRescheduleModal, setShowRescheduleModal] = useState(null);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [selectedEducationalArticle, setSelectedEducationalArticle] = useState(null);
@@ -687,11 +699,11 @@ function App() {
   }, []);
 
   // Handler: Paciente avisa inasistencia
-  const handleReportAbsence = useCallback((reason) => {
-    if (!nextAppointment) return;
+  const handleReportAbsence = useCallback((appointment, reason) => {
+    if (!appointment) return;
 
     setAppointments(prev => prev.map(apt => {
-      if (apt.id === nextAppointment.id) {
+      if (apt.id === appointment.id) {
         return {
           ...apt,
           status: 'CANCELLED_PATIENT',
@@ -701,16 +713,20 @@ function App() {
       return apt;
     }));
 
-    setShowAbsenceModal(false);
+    setAbsenceTarget(null);
+
+    const appointmentWhen = appointment.date === DEMO_TODAY
+      ? `de hoy (${appointment.time} hrs)`
+      : `del ${formatFriendlyDate(appointment.date)} (${appointment.time} hrs)`;
 
     triggerNotification(
       currentPatient.preferredChannel === 'EMAIL' ? currentPatient.contactEmail : currentPatient.contactPhone,
       currentPatient.preferredChannel,
       'Inasistencia Registrada',
-      `Estimado/a ${currentPatient.firstName}, hemos recibido tu aviso de inasistencia para la sesión de hoy (${nextAppointment.time} hrs). Tu cupo ha sido liberado y tu equipo clínico coordinará la reprogramación de tu dosis al final del ciclo para garantizar la efectividad total del tratamiento. Que te recuperes pronto.`,
+      `Estimado/a ${currentPatient.firstName}, hemos recibido tu aviso de inasistencia para tu cita ${appointmentWhen}. Tu cupo ha sido liberado y tu equipo clínico coordinará la reprogramación de tu dosis al final del ciclo para garantizar la efectividad total del tratamiento. Que te recuperes pronto.`,
       'Aviso de Inasistencia'
     );
-  }, [nextAppointment, currentPatient, triggerNotification]);
+  }, [currentPatient, triggerNotification]);
 
   // Handler: Profesional reprograma una cita
   const handleRescheduleAppointment = useCallback((appointmentId, newDate, newTime) => {
@@ -925,7 +941,7 @@ function App() {
             calendarMonthOffset={calendarMonthOffset}
             setCalendarMonthOffset={setCalendarMonthOffset}
             onSelectAppointment={setSelectedAppointmentDetail}
-            onOpenAbsenceModal={() => setShowAbsenceModal(true)}
+            onOpenAbsenceModal={() => setAbsenceTarget(nextAppointment)}
             onSelectArticle={setSelectedEducationalArticle}
           />
         </main>
@@ -939,12 +955,12 @@ function App() {
         </footer>
 
         {/* MODALES DEL PACIENTE */}
-        {showAbsenceModal && (
+        {absenceTarget && (
           <AbsenceModal
             patient={currentPatient}
-            appointment={nextAppointment}
-            onClose={() => setShowAbsenceModal(false)}
-            onConfirm={handleReportAbsence}
+            appointment={absenceTarget}
+            onClose={() => setAbsenceTarget(null)}
+            onConfirm={(reason) => handleReportAbsence(absenceTarget, reason)}
           />
         )}
 
@@ -955,8 +971,8 @@ function App() {
             machine={machines.find(m => m.id === selectedAppointmentDetail.machineId)}
             onClose={() => setSelectedAppointmentDetail(null)}
             onCancelFromDetail={() => {
+              setAbsenceTarget(selectedAppointmentDetail);
               setSelectedAppointmentDetail(null);
-              setShowAbsenceModal(true);
             }}
           />
         )}
@@ -1087,7 +1103,7 @@ function App() {
             calendarMonthOffset={calendarMonthOffset}
             setCalendarMonthOffset={setCalendarMonthOffset}
             onSelectAppointment={setSelectedAppointmentDetail}
-            onOpenAbsenceModal={() => setShowAbsenceModal(true)}
+            onOpenAbsenceModal={() => setAbsenceTarget(nextAppointment)}
             onSelectArticle={setSelectedEducationalArticle}
           />
         ) : (
@@ -1130,6 +1146,15 @@ function App() {
         />
       )}
 
+      {absenceTarget && (
+        <AbsenceModal
+          patient={currentPatient}
+          appointment={absenceTarget}
+          onClose={() => setAbsenceTarget(null)}
+          onConfirm={(reason) => handleReportAbsence(absenceTarget, reason)}
+        />
+      )}
+
       {selectedAppointmentDetail && (
         <AppointmentDetailModal
           appointment={selectedAppointmentDetail}
@@ -1137,8 +1162,8 @@ function App() {
           machine={machines.find(m => m.id === selectedAppointmentDetail.machineId)}
           onClose={() => setSelectedAppointmentDetail(null)}
           onCancelFromDetail={() => {
+            setAbsenceTarget(selectedAppointmentDetail);
             setSelectedAppointmentDetail(null);
-            setShowAbsenceModal(true);
           }}
         />
       )}
@@ -1180,6 +1205,14 @@ function PatientPortalView({
   onSelectArticle,
 }) {
   const percentCompleted = Math.round((patient.completedFractions / patient.totalFractions) * 100);
+  const isWaitingForTac = patient.currentPhase === 'ESPERA_TAC';
+
+  // Datos visibles de la próxima cita, según su tipo y su fecha real
+  const nextAppointmentLabels = nextAppointment ? APPOINTMENT_TYPE_LABELS[nextAppointment.type] : null;
+  const isNextAppointmentToday = nextAppointment?.date === DEMO_TODAY;
+  const nextAppointmentWeekday = nextAppointment
+    ? WEEKDAY_SHORT[new Date(`${nextAppointment.date}T12:00:00`).getDay()]
+    : '';
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -1221,7 +1254,7 @@ function PatientPortalView({
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-brand-500/20 border border-brand-400/30 text-brand-300 text-xs font-semibold mb-3">
               <span className="w-2 h-2 rounded-full bg-brand-400"></span>
-              <span>Tratamiento en Curso • {patient.diagnosisLabel}</span>
+              <span>{isWaitingForTac ? 'En Espera de TAC de Simulación' : 'Tratamiento en Curso'} • {patient.diagnosisLabel}</span>
             </div>
             <h1 className="font-display font-bold text-2xl sm:text-3xl text-white">
               Hola, {patient.firstName}
@@ -1257,15 +1290,27 @@ function PatientPortalView({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 pt-6 border-t border-slate-700/60">
           {/* Hito 1: TAC Simulación */}
           <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-700/40 flex items-start space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
+            {isWaitingForTac ? (
+              <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            ) : (
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            )}
             <div>
               <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">1. TAC Simulación</span>
               <span className="font-semibold text-sm text-white block">{formatFriendlyDate(patient.tacDate)}</span>
-              <span className="text-[11px] text-emerald-400 font-medium">Completado con éxito</span>
+              {isWaitingForTac ? (
+                <span className="text-[11px] text-amber-300 font-medium">Programado: tu próximo paso</span>
+              ) : (
+                <span className="text-[11px] text-emerald-400 font-medium">Completado con éxito</span>
+              )}
             </div>
           </div>
 
@@ -1279,7 +1324,11 @@ function PatientPortalView({
             <div>
               <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">2. Inicio de Sesiones</span>
               <span className="font-semibold text-sm text-white block">{formatFriendlyDate(patient.startDate)}</span>
-              <span className="text-[11px] text-brand-300 font-medium">En curso activo</span>
+              {isWaitingForTac ? (
+                <span className="text-[11px] text-slate-400 font-medium">Comienza después del TAC</span>
+              ) : (
+                <span className="text-[11px] text-brand-300 font-medium">En curso activo</span>
+              )}
             </div>
           </div>
 
@@ -1304,18 +1353,20 @@ function PatientPortalView({
         <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-start space-x-4">
             <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-700 border border-brand-200 flex flex-col items-center justify-center shrink-0">
-              <span className="text-[10px] uppercase font-bold tracking-tight">HOY</span>
-              <span className="font-display font-extrabold text-base leading-none">05</span>
+              <span className="text-[10px] uppercase font-bold tracking-tight">{isNextAppointmentToday ? 'HOY' : nextAppointmentWeekday}</span>
+              <span className="font-display font-extrabold text-base leading-none">{nextAppointment.date.slice(8)}</span>
             </div>
             <div>
               <div className="flex items-center space-x-2">
                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-800">
-                  {nextAppointment.type === 'SESION_RADIOTERAPIA' ? `Sesión #${nextAppointment.sessionNumber}` : 'Control Médico'}
+                  {nextAppointmentLabels?.badge(nextAppointment) || nextAppointment.type}
                 </span>
-                <span className="text-xs text-slate-500">Hora programada: <strong className="text-slate-800 text-sm">{nextAppointment.time} hrs</strong></span>
+                <span className="text-xs text-slate-500">
+                  {isNextAppointmentToday ? 'Hora programada:' : `${formatFriendlyDate(nextAppointment.date)} a las`} <strong className="text-slate-800 text-sm">{nextAppointment.time} hrs</strong>
+                </span>
               </div>
               <h3 className="font-display font-bold text-slate-900 text-lg mt-1">
-                {nextAppointment.type === 'SESION_RADIOTERAPIA' ? 'Sesión diaria de radioterapia' : 'Control semanal con radioncólogo'}
+                {nextAppointmentLabels?.title || nextAppointment.type}
               </h3>
               <p className="text-xs text-slate-600 mt-1 max-w-xl">
                 📌 <strong>Instrucción de preparación:</strong> {nextAppointment.preparation}
@@ -1332,7 +1383,7 @@ function PatientPortalView({
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span>Avisar que no podré asistir hoy</span>
+              <span>{isNextAppointmentToday ? 'Avisar que no podré asistir hoy' : 'Avisar que no podré asistir'}</span>
             </button>
             <span className="text-[11px] text-slate-500 hidden md:block">Libera el cupo para otro paciente y reprograma</span>
           </div>
@@ -2013,6 +2064,13 @@ function AbsenceModal({ patient, appointment, onClose, onConfirm }) {
           Tu salud y comodidad son lo primero. Al avisar, el equipo médico libera el cupo para agilizar la atención de otros pacientes y programa la recuperación de tu dosis.
         </p>
 
+        <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900">
+          <span className="font-semibold block">Cita que vas a cancelar:</span>
+          <span>
+            {APPOINTMENT_TYPE_LABELS[appointment.type]?.badge(appointment) || appointment.type} • {formatFriendlyDate(appointment.date)} a las {appointment.time} hrs
+          </span>
+        </div>
+
         <div className="mt-4 space-y-3 text-xs">
           <div>
             <label className="font-semibold text-slate-700 block mb-1">Motivo principal:</label>
@@ -2106,15 +2164,17 @@ function AppointmentDetailModal({ appointment, patient, machine, onClose, onCanc
         </div>
 
         <div className="mt-6 flex items-center justify-between">
-          <button
-            onClick={onCancelFromDetail}
-            className="text-xs text-rose-700 hover:text-rose-900 font-semibold underline"
-          >
-            ¿No podrás asistir a esta cita?
-          </button>
+          {appointment.status === 'SCHEDULED' && (
+            <button
+              onClick={onCancelFromDetail}
+              className="text-xs text-rose-700 hover:text-rose-900 font-semibold underline"
+            >
+              ¿No podrás asistir a esta cita?
+            </button>
+          )}
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
+            className="ml-auto px-4 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
           >
             Entendido
           </button>
@@ -2329,24 +2389,37 @@ function EducationalArticleModal({ article, patient, onClose }) {
         </p>
 
         <div className="mt-6 text-sm text-slate-700 leading-relaxed space-y-4 border-t border-slate-100 pt-4">
-          {article.content.split('\n\n').map((paragraph, index) => {
-            if (paragraph.trim().startsWith('###')) {
+          {parseArticleContent(article.content).map((block, index) => {
+            if (block.type === 'h4') {
               return (
                 <h4 key={index} className="font-display font-bold text-base text-slate-900 pt-2">
-                  {paragraph.replace('###', '').trim()}
+                  {renderInlineMarkdown(block.text)}
                 </h4>
               );
             }
-            if (paragraph.trim().startsWith('####')) {
+            if (block.type === 'h5') {
               return (
                 <h5 key={index} className="font-display font-semibold text-sm text-brand-800 pt-1">
-                  {paragraph.replace('####', '').trim()}
+                  {renderInlineMarkdown(block.text)}
                 </h5>
+              );
+            }
+            if (block.type === 'ul' || block.type === 'ol') {
+              const ListTag = block.type;
+              return (
+                <ListTag
+                  key={index}
+                  className={`${block.type === 'ul' ? 'list-disc' : 'list-decimal'} pl-5 space-y-1.5 text-xs sm:text-sm text-slate-600`}
+                >
+                  {block.items.map((item, itemIndex) => (
+                    <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
+                  ))}
+                </ListTag>
               );
             }
             return (
               <p key={index} className="text-xs sm:text-sm text-slate-600">
-                {paragraph.trim()}
+                {renderInlineMarkdown(block.text)}
               </p>
             );
           })}
@@ -2435,6 +2508,61 @@ function calculateDelayedTime(originalTime, minutesToAdd) {
   const newH = Math.floor(totalMin / 60) % 24;
   const newM = totalMin % 60;
   return `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
+}
+
+// Convierte el texto de una cápsula (### títulos, #### subtítulos, listas con "-" o "1.")
+// en bloques. Se procesa línea a línea porque las líneas en blanco traen la indentación del código.
+function parseArticleContent(content) {
+  const blocks = [];
+  let current = null; // Párrafo o lista que se está armando
+
+  content.split('\n').forEach(rawLine => {
+    const line = rawLine.trim();
+    if (!line) {
+      current = null;
+      return;
+    }
+
+    const heading = line.match(/^(#{3,4})\s+(.*)$/);
+    if (heading) {
+      blocks.push({ type: heading[1].length === 3 ? 'h4' : 'h5', text: heading[2] });
+      current = null;
+      return;
+    }
+
+    const listItem = line.match(/^(-|\d+\.)\s+(.*)$/);
+    if (listItem) {
+      const listType = listItem[1] === '-' ? 'ul' : 'ol';
+      if (!current || current.type !== listType) {
+        current = { type: listType, items: [] };
+        blocks.push(current);
+      }
+      current.items.push(listItem[2]);
+      return;
+    }
+
+    if (current && current.type === 'p') {
+      current.text += ' ' + line;
+    } else {
+      current = { type: 'p', text: line };
+      blocks.push(current);
+    }
+  });
+
+  return blocks;
+}
+
+// Aplica **negrita** y *cursiva* sin insertar HTML crudo
+function renderInlineMarkdown(text) {
+  return text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).filter(Boolean).map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={index} className="font-semibold text-slate-800">{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return <em key={index}>{part.slice(1, -1)}</em>;
+    }
+    return part;
+  });
 }
 
 // Render en el DOM
